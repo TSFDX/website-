@@ -1,64 +1,69 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, send_file
 import yt_dlp
 import os
 
 app = Flask(__name__)
 
-@app.route('/api/download', methods=['POST'])
-def download_video():
+@app.route('/', methods=['GET','POST'])
+def download_youtube():
     try:
-        # Ambil URL dari request
-        url = request.json.get('url')
+        url = request.form.get('url')
         
-        # Pengaturan download
-        download_options = {
-            'format': 'best[ext=mp4]',  # Pilih video terbaik
-            'outtmpl': '/tmp/video.mp4'  # Simpan di folder sementara
+        # Konfigurasi tanpa merging format
+        ydl_opts = {
+            'format': 'mp4', # Pilih format video langsung
+            'outtmpl': '%(title)s.%(ext)s',
+            'nooverwrites': True,
+            'no_warnings': True,
+            'ignoreerrors': False
         }
         
-        # Proses download
-        with yt_dlp.YoutubeDL(download_options) as downloader:
-            video_info = downloader.extract_info(url, download=True)
-            
-        # Kirim balasan sukses
-        return jsonify({
-            'status': 'success',
-            'message': 'Video berhasil didownload'
-        })
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+        
+        return send_file(filename, as_attachment=True)
     
-    except Exception as error:
-        # Tangani error
-        return jsonify({
-            'status': 'error',
-            'message': str(error)
-        }), 400
+    except Exception as e:
+        return f"Error Download: {str(e)}", 400
 
-# Halaman utama
-@app.route('/', methods=['GET'])
-def home():
+@app.route('/download', methods=['GET'])
+def index():
     return '''
+    <!DOCTYPE html>
     <html>
-        <body>
-            <h1>YouTube Downloader</h1>
-            <input type="text" id="url" placeholder="Masukkan URL YouTube">
-            <button onclick="download()">Download</button>
-            
-            <script>
-                function download() {
-                    const url = document.getElementById('url').value;
-                    fetch('/api/download', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({url: url})
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        alert(data.message);
-                    });
-                }
-            </script>
-        </body>
+    <head>
+        <title>YouTube Downloader</title>
+        <style>
+            body { 
+                font-family: Arial; 
+                text-align: center; 
+                margin-top: 50px; 
+            }
+            input { 
+                width: 300px; 
+                padding: 10px; 
+                margin: 10px 0; 
+            }
+            button {
+                padding: 10px 20px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>YouTube Video Downloader</h2>
+        <form method="POST" action="/">
+            <input type="text" name="url" placeholder="Masukkan URL YouTube">
+            <br>
+            <button type="submit">Download Video</button>
+        </form>
+    </body>
     </html>
     '''
+
+if __name__ == '__main__':
+    # Buat direktori download jika belum ada
+    os.makedirs('downloads', exist_ok=True)
